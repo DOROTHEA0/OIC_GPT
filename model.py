@@ -30,9 +30,7 @@ class Attention(nn.Module):
         dk = torch.tensor(hidden_dim, dtype=qk.dtype, device=qk.device)
         scores = F.softmax(qk / torch.sqrt(dk), dim=-1)
         att_out = scores @ v
-        print(att_out.shape)
         att_out = torch.permute(att_out, (0, 2, 1, 3))
-        print(att_out.shape)
         att_out = att_out.reshape(bsz, seq_len, n_head * hidden_dim)
         return self.out_linear(att_out)
 
