@@ -21,12 +21,19 @@ class Attention(nn.Module):
         out_dim = embed_dim if use_head_alloc else embed_dim * n_head
         self.out_linear = nn.Linear(out_dim, embed_dim)
 
-    def forward(self, x):
+    def forward(self, x, mask=False):
         q = self.q_linear(x)
         k = self.k_linear(x)
         v = self.v_linear(x)
         bsz, n_head, seq_len, hidden_dim = k.shape
         qk = q @ torch.transpose(k, 2, 3)
+
+        if mask:
+            mask = torch.triu(torch.ones((seq_len, seq_len), device=x.device), diagonal=1)
+            mask = mask.bool()
+            mask = mask[None, None, :, :]
+            qk = qk.masked_fill(mask, float('-inf'))
+
         dk = torch.tensor(hidden_dim, dtype=qk.dtype, device=qk.device)
         scores = F.softmax(qk / torch.sqrt(dk), dim=-1)
         att_out = scores @ v
