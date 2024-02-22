@@ -12,12 +12,13 @@ def count_parameters(model):
     print(f"Trainable parameters: {trainable_params:,}")
     print(f"Non-trainable parameters: {non_trainable_params:,}")
 
+
 class Attention(nn.Module):
     def __init__(self, embed_dim, n_head, bias=True, use_head_alloc=True):
         super(Attention, self).__init__()
-        self.q_linear = ParallelLinear(n_head, embed_dim, bias, use_head_alloc)
-        self.k_linear = ParallelLinear(n_head, embed_dim, bias, use_head_alloc)
-        self.v_linear = ParallelLinear(n_head, embed_dim, bias, use_head_alloc)
+        self.q_linear = MultiLinear(n_head, embed_dim, bias, use_head_alloc)
+        self.k_linear = MultiLinear(n_head, embed_dim, bias, use_head_alloc)
+        self.v_linear = MultiLinear(n_head, embed_dim, bias, use_head_alloc)
         out_dim = embed_dim if use_head_alloc else embed_dim * n_head
         self.out_linear = nn.Linear(out_dim, embed_dim)
 
@@ -42,9 +43,9 @@ class Attention(nn.Module):
         return self.out_linear(att_out)
 
 
-class ParallelLinear(nn.Module):
+class MultiLinear(nn.Module):
     def __init__(self, n_head, hidden_dim, bias=True, use_head_alloc=True):
-        super(ParallelLinear, self).__init__()
+        super(MultiLinear, self).__init__()
         head_dim = hidden_dim // n_head if use_head_alloc else hidden_dim
         self.weight = nn.Parameter(torch.empty(n_head, hidden_dim, head_dim))
         self.bias = nn.Parameter(torch.empty(n_head, 1, head_dim)) if bias else None
@@ -59,8 +60,37 @@ class ParallelLinear(nn.Module):
             x += self.bias
         return x
 
+class FeedForward(nn.Module):
+    def __init__(self, in_dim, hidden_dim):
+        super(FeedForward, self).__init__()
+        self.linear1 = nn.Linear(in_dim, hidden_dim)
+        self.linear2 = nn.Linear(in_dim, hidden_dim)
+        self.linear3 = nn.Linear(hidden_dim, in_dim)
+
+    def forward(self, x):
+        return self.linear3(F.silu(self.linear1(x)) * self.linear2(x))
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, embed_dim, n_head, feed_hid_dim, att_bias=True, use_head_alloc=True):
+        super(TransformerBlock, self).__init__()
+        self.attention = Attention(embed_dim, n_head, bias=att_bias, use_head_alloc=use_head_alloc)
+        self.feedforward = FeedForward(embed_dim, feed_hid_dim)
+        self.layer_norm1 = nn.LayerNorm(embed_dim)
+        self.layer_norm2 = nn.LayerNorm(embed_dim)
+
+    def forward(self, x, mask=True):
+        h = self.layer_norm1(self.attention(x, mask) + x)
+        out = self.layer_norm2(self.feedforward(h) + h)
+        return out
+
+
+
+
 if __name__ == '__main__':
-    m = Attention(128, 8)
-    x = torch.rand((2, 7, 128))
-    print(m(x).shape)
-    count_parameters(m)
+    model = TransformerBlock(512, 8, 1024)
+    x = torch.rand((1, 2, 512))
+    print(model(x).shape)
+    count_parameters(model)
+    onnx_filename = "transform_block.onnx"
+    torch.onnx.export(model, x, onnx_filename, verbose=True)
