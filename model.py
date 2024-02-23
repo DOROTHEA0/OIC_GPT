@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import optim
 
 
 def count_parameters(model):
@@ -60,6 +61,7 @@ class MultiLinear(nn.Module):
             x += self.bias
         return x
 
+
 class FeedForward(nn.Module):
     def __init__(self, in_dim, hidden_dim):
         super(FeedForward, self).__init__()
@@ -85,12 +87,33 @@ class TransformerBlock(nn.Module):
         return out
 
 
+class GenerativeTransformer(nn.Module):
+    def __init__(self, vocab_size, embed_dim, n_head, feed_hid_dim, n_layers, att_bias=True, use_head_alloc=True):
+        super(GenerativeTransformer, self).__init__()
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.n_head = n_head
+        self.feed_hid_dim = feed_hid_dim
+        self.n_layers = n_layers
+
+        self.word_embed = nn.Embedding(num_embeddings=self.vocab_size, embedding_dim=self.embed_dim)
+        self.layers = torch.nn.ModuleList()
+        for _ in range(self.n_layers):
+            self.layers.append(
+                TransformerBlock(embed_dim=self.embed_dim, n_head=self.n_head,
+                                 feed_hid_dim=self.feed_hid_dim, att_bias=att_bias, use_head_alloc=use_head_alloc))
+        self.out_layer = nn.Linear(self.embed_dim, self.vocab_size)
+
+    def forward(self, word_indices, mask=True):
+        word_embed = self.word_embed(word_indices)
+        for layer in self.layers:
+            word_embed = layer(word_embed, mask)
+        return self.out_layer(word_embed)
 
 
 if __name__ == '__main__':
-    model = TransformerBlock(512, 8, 1024)
-    x = torch.rand((1, 2, 512))
+    model = GenerativeTransformer(10000, 2048, 8, feed_hid_dim=2048, n_layers=16)
+    x = torch.tensor([[2, 5, 2, 7, 4, 6, 12, 65, 23, 75], [2, 5, 2, 7, 4, 6, 12, 65, 23, 75]], dtype=torch.int)
+    print(x.shape)
     print(model(x).shape)
     count_parameters(model)
-    onnx_filename = "transform_block.onnx"
-    torch.onnx.export(model, x, onnx_filename, verbose=True)
