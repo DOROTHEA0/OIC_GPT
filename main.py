@@ -1,11 +1,25 @@
-import torch
-import torch.nn as nn
+from tokenizer import OICTokenizer
 import torch.onnx
+from model import GenerativeTransformer
 
-model = nn.MultiheadAttention(embed_dim=16, num_heads=8, dropout=0.)
-nn.LayerNorm
-x = torch.randn((1, 10, 4))
+if __name__ == '__main__':
+    m = GenerativeTransformer(vocab_size=256, embed_dim=512, n_head=4, feed_hid_dim=512, n_layers=4, use_byte_embed=True)
+    m.load_state_dict(torch.load("model.pth"))
+    t = OICTokenizer()
+    text = "茄子"
+    x, _ = t.encode(text)
+    x = torch.tensor(x, dtype=torch.int)[None, :, :]
+    for _ in range(1000):
+        with torch.no_grad():
+            out_logits = m(x)
+            _, indices = torch.max(out_logits, dim=-1)
+            indices = indices[:, -1, :]
+            next = indices + torch.tensor([[0, 256, 256 * 2, 256 * 3]], dtype=torch.int)
+            x = x.tolist()
+            next = next.tolist()
+            x[0].append(next[0])
+            x = torch.tensor(x, dtype=int)
+            print(t.decode(indices.tolist()), end="")
 
-onnx_filename = "model_with_attention.onnx"
-torch.onnx.export(model, (x, x, x), onnx_filename, verbose=True)
+
 

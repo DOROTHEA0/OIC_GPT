@@ -87,3 +87,5 @@ poetry.lock
 venv
 
 *.onnx
+*.pth
+*.pt

@@ -1,29 +1,32 @@
 import torch
 from torch import optim, nn
-
+from tokenizer import OICTokenizer
 
 def test_model(model):
-    batch_size = 64
-    seq_len = 10
-    embed_dim = 128
-    x_train = torch.rand((batch_size, seq_len, embed_dim), dtype=torch.float)
-    y_train = x_train.clone() * 2
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    criterion = nn.MSELoss()
+    model = model.cuda()
+    text = "茄子茄子茄子茄子茄子茄子茄子茄子"
+    t = OICTokenizer()
+    x, x_ = t.encode(text)
+    x, x_ = torch.tensor(x, dtype=torch.int)[None, :, :], torch.tensor(x_, dtype=torch.int)
+    y = x_[1:, :].clone().view(-1).cuda()
+    x_train = x[:, :len(text) - 1, :].cuda()
+    optimizer = optim.AdamW(model.parameters(), betas=(0.9, 0.95), eps=10e-5, lr=3e-4)
+    criterion = nn.CrossEntropyLoss()
 
-    epochs = 5000
+
+
+    epochs = 200
 
     for epoch in range(epochs):
         optimizer.zero_grad()
         output = model(x_train)
-        loss = criterion(output, y_train)
+        bsz, seq_l, c_l, l_l = output.shape
+        output = output.reshape(bsz, seq_l * c_l, l_l)
+        loss = criterion(output.view(-1, output.shape[-1]), y.long())
         loss.backward()
         optimizer.step()
 
         if (epoch + 1) % 10 == 0:
             print(f'Epoch [{epoch + 1}/{epochs}], Loss: {loss.item()}')
 
-    with torch.no_grad():
-        test_output = model(x_train)
-        test_loss = criterion(test_output, y_train)
-        print(f'Test Loss: {test_loss.item()}')
+    torch.save(model.state_dict(), 'model.pth')
