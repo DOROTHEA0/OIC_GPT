@@ -21,7 +21,7 @@ class OICTokenizer:
                 # 解码UTF-8编码的字节序列为字符串，并追加到结果字符串中
                 decoded_str += byte_sequence.decode('utf-8')
         except UnicodeDecodeError:
-            print(str_indices)
+            return "?"
         return decoded_str
 
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     # Let's encode a string into its UTF-8 encoded form and then display each byte's hexadecimal representation.
     t = OICTokenizer()
-    string_to_encode = '衄'
+    string_to_encode = '『'
     print(t.encode(string_to_encode)[0])
 
 

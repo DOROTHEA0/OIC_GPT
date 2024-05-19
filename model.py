@@ -4,23 +4,19 @@ import torch.nn.functional as F
 from torch import optim
 
 import tokenizer
+import utils
 
-
-def count_parameters(model):
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    non_trainable_params = total_params - trainable_params
-
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
-    print(f"Non-trainable parameters: {non_trainable_params:,}")
 
 class ByteEmbedding(nn.Module):
     def __init__(self, embed_dim):
         super(ByteEmbedding, self).__init__()
         embed_size = 256 * 4
         self.embed = nn.Embedding(num_embeddings=embed_size, embedding_dim=embed_dim)
-        self.proj = nn.Linear(4 * embed_dim, embed_dim)
+        self.proj = nn.Sequential(
+            nn.Linear(4 * embed_dim, embed_dim),
+            nn.SiLU(),
+            nn.Linear(embed_dim, embed_dim)
+        )
 
     def forward(self, x):
         x = self.embed(x)
@@ -120,7 +116,7 @@ class TransformerBlock(nn.Module):
 
 
 class GenerativeTransformer(nn.Module):
-    def __init__(self, vocab_size, embed_dim, n_head, feed_hid_dim, n_layers, att_bias=True, use_head_alloc=True, use_byte_embed=False):
+    def __init__(self, vocab_size, embed_dim, n_head, feed_hid_dim, n_layers, att_bias=False, use_head_alloc=True, use_byte_embed=False):
         super(GenerativeTransformer, self).__init__()
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
@@ -147,8 +143,25 @@ class GenerativeTransformer(nn.Module):
             out_logits = torch.transpose(out_logits, 1, 2)
         return out_logits
 
+class SSM(nn.Module):
+    def __init__(self, embed_dim, hidden_dim):
+        super(SSM, self).__init__()
+        self.A = nn.Parameter(torch.empty(hidden_dim, hidden_dim))
+        self.B = nn.Parameter(torch.empty(embed_dim, hidden_dim))
+        self.C = nn.Parameter(torch.empty(hidden_dim, embed_dim))
+        self.D = nn.Parameter(torch.empty(embed_dim, embed_dim))
+        self.hidden_state = None
+
+    def forward(self, x):
+        bsz, seq_len, embed_dim = x.shape
+        if self.hidden_state is None:
+            self.hidden_state = nn.Parameter(torch.empty(bsz, seq_len, embed_dim, embed_dim))
+        x_ = x @ self.B
+        # 没写完
+        pass
+
+
 
 if __name__ == '__main__':
-    from utils import test_model
-    model = GenerativeTransformer(vocab_size=256, embed_dim=512, n_head=4, feed_hid_dim=512, n_layers=4, use_byte_embed=True)
-    test_model(model)
+    model = GenerativeTransformer(1, 512, 8, 512, 6, att_bias=False, use_head_alloc=True, use_byte_embed=True)
+    utils.test_model(model)

@@ -3,13 +3,13 @@ import torch.onnx
 from model import GenerativeTransformer
 
 if __name__ == '__main__':
-    m = GenerativeTransformer(vocab_size=256, embed_dim=512, n_head=4, feed_hid_dim=512, n_layers=4, use_byte_embed=True)
+    m = GenerativeTransformer(vocab_size=256, embed_dim=512, n_head=8, feed_hid_dim=512, n_layers=6, use_byte_embed=True)
     m.load_state_dict(torch.load("model.pth"))
     t = OICTokenizer()
-    text = "茄子"
+    text = "一般由："
     x, _ = t.encode(text)
     x = torch.tensor(x, dtype=torch.int)[None, :, :]
-    for _ in range(1000):
+    for _ in range(100):
         with torch.no_grad():
             out_logits = m(x)
             _, indices = torch.max(out_logits, dim=-1)
